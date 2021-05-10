@@ -88,7 +88,7 @@ class Event:
             global END
             END = True
         elif typ == 3:
-            print("ARRIVAL")
+            print(f"ARRIVAL t: {self.time}")
             #schedule the next arrival
             at = self.time+numpy.random.exponential(1/lam)
             if(at<maxTime):
@@ -103,11 +103,12 @@ class Event:
                 #self.execute(queue)
             #if the server is busy increase the number of packet in the queue
             else:
+                global packetQueue
                 packetQueue += 1
         elif typ == 4:
-            print("DEPARTURE")
+            print(f"DEPARTURE t: {self.time}")
+            # global server
             if(packetQueue == 0):
-                global server
                 server = True 
             else:
                 server = False
@@ -115,7 +116,7 @@ class Event:
                 if (at<maxTime):
                     q.insert(Event(at, Type.DEPARTURE))
         elif typ == 5:
-            print(f"DEBUG TIME: {t}")
+            print(f"DEBUG TIME: {self.time}")
             print(queue.toString())
 
 
