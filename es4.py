@@ -2,6 +2,8 @@ from enum import Enum
 import time 
 import numpy
 import matplotlib.pyplot as plt
+import math
+import random
 
 
 class EventQueue:
@@ -52,7 +54,7 @@ q = EventQueue()
 #time
 t = 0
 #maximum simulation time (s)  ##500000
-maxTime = 10
+maxTime = 50000
 #seed of the RNG
 numpy.random.seed(232)
 #server status: true if it is free, false if it is working
@@ -61,18 +63,43 @@ server = True
 packetQueue = 0
 
 #part2
-e2c = 2
+e2c = 10
 e2k = 10
 servers = []
 for i in range(0,e2c):
     servers.append([True, []])
     
 #es 2, packet assignment policy used
-assignmentPolicy = "round-robin"
+class AssignmentPolicy(Enum):
+    ROUND_ROBIN = 1
+    LEAST_LOADED = 2
+    QUEUE_OCCUPANCY = 3
+
 contEv = 0
 
+#round robin
 def rr(n, servers):
     return n % servers
+
+#least loaded
+def leastLoaded(servers):
+    minSer = [-1, e2k+1]
+    for i in range(0, e2c):
+        if servers[i][0] == True:
+            return i
+        elif len(servers[i][1]) < minSer[1]:
+            minSer[0] = i
+            minSer[1] = len(servers[i][1])
+    return minSer[0]
+
+#avoid sending packets to a queue that is more than x% full
+def queueOccupancy(x, servers):
+    maxQ = math.floor(x*e2k/100)
+    for i in range(0, e2c):
+        if(len(servers[i][1]) < maxQ):
+            return i
+    #if no queue satisfies the condition, choose one randomly 
+    return random.randint(0,e2c-1)
 
 class Type(Enum):
     START = 1
@@ -148,6 +175,13 @@ class Event2:
         typ = self.type.value
         global packetQueue
         global contEv
+        if(assignmentPolicy == AssignmentPolicy.ROUND_ROBIN):
+            s = rr(contEv, e2c)
+            contEv += 1
+        elif(assignmentPolicy == AssignmentPolicy.LEAST_LOADED):
+            s = leastLoaded(servers)
+        elif(assignmentPolicy == AssignmentPolicy.QUEUE_OCCUPANCY):
+            s = queueOccupancy(qOcc, servers)
         if typ == 1:
             print("START")
             at = numpy.random.exponential(1/lam)
@@ -157,42 +191,39 @@ class Event2:
             global END
             END = True
         elif typ == 3:
-            print("ARRIVAL")
+            # print("ARRIVAL")
             at = self.time+numpy.random.exponential(1/lam)
             q.insert(Event2(at, Type.ARRIVAL))
             #if server is free, seize it and schedule the departure of the packet
-            if(assignmentPolicy == "round-robin"):
-                s = rr(contEv, e2c)
-                contEv += 1
-                print(f"Server {servers[s][0]}")
-                if servers[s][0] == True:
-                    print(f"modifica server {s}")
-                    servers[s][0] = False
-                    at = self.time+numpy.random.exponential(1/u)
-                    q.insert(Event2(at, Type.DEPARTURE))
-                #if the server is busy increase the number of packet in the queue
-                else:
-                    #if queue is not full
-                    if(len(servers[s][1]) < e2k):
-                        servers[s][1].append(self.time)
-            print(servers)
+            
+            #print(f"Server {servers[s][0]}")
+            if servers[s][0] == True:
+                servers[s][0] = False
+                at = self.time+numpy.random.exponential(1/u)
+                q.insert(Event2(at, Type.DEPARTURE))
+            #if the server is busy increase the number of packet in the queue
+            else:
+                #if queue is not full
+                if(len(servers[s][1]) < e2k):
+                    servers[s][1].append(self.time)
+            #print(servers)
         elif typ == 4:
-            print("DEPARTURE")
-            if(assignmentPolicy == "round-robin"):
-                s = rr(contEv, e2c)
-                contEv += 1
-                if(len(servers[s][1]) == 0):
-                    servers[s][0] = True
-                else:
-                    servers[s][0] = False
-                    at = self.time+numpy.random.exponential(1/u)
-                    q.insert(Event2(at, Type.DEPARTURE))
-                    servers[s][1].pop(0)
-            print(server)
+            # print("DEPARTURE")
+            
+            if(len(servers[s][1]) == 0):
+                servers[s][0] = True
+            else:
+                servers[s][0] = False
+                at = self.time+numpy.random.exponential(1/u)
+                q.insert(Event2(at, Type.DEPARTURE))
+                servers[s][1].pop(0)
+            #print(server)
         elif typ == 5:
             print(f"   DEBUG TIME: {self.time}")
             # print(queue.toString())
             print(f"      PacketQueue: {packetQueue}, server: {server}")
+        # print(f"Servers: {servers}")
+        # print(f"S: {s}")
 
 
 
@@ -278,7 +309,7 @@ wt = []
 
 # # print(time)
 # # print(packetNumber)
-
+# END = False
 
 # i = 0
 # j = 0
@@ -349,6 +380,11 @@ for i in range(0, e2c):
     wt.append([])
     packetServed.append(0)
 
+
+
+#round robin
+print("\n\nRound robin")
+assignmentPolicy = AssignmentPolicy.ROUND_ROBIN
 while(not END):
     #execute event (first the start event)
     time.append(t)
@@ -385,8 +421,192 @@ while(not END):
 
     ev.execute(q)
 
-print(servers)
-#waiting time for each server
-print(wt)
+# print(servers)
+# #waiting time for each server
+# print(wt)
 #number of packet served from each server
 print(packetServed)
+END = False
+
+fig, axes = plt.subplots(figsize=(7,5), dpi=100)
+plt.bar(range(1, e2c+1), height=packetServed)
+title = 'Packet served by each server using RR, c:' + str(e2c) + ', k: ' + str(e2k)
+plt.title(title)
+plt.show()
+
+ywt = []
+for elem in wt:
+    ywt.append(mean(elem))
+fig, axes = plt.subplots(figsize=(7,5), dpi=100)
+plt.bar(range(1, e2c+1), height=ywt)
+title = 'Queuing delay using RR, c:' + str(e2c) + ', k: ' + str(e2k)
+plt.title(title)
+plt.show()
+
+
+
+
+
+
+
+servers = []
+for i in range(0,e2c):
+    servers.append([True, []])
+q = EventQueue()
+#insert start and end event
+start = Event2(0, Type.START)
+end = Event2(maxTime, Type.END)
+q.queue.append(start)
+q.queue.append(end)
+# print(q.toString())
+
+packetServed = []
+waitingTime = []
+wt = []
+for i in range(0, e2c):
+    waitingTime.append([])
+    wt.append([])
+    packetServed.append(0)
+#least loaded
+print("\n\nLeast loaded")
+assignmentPolicy = AssignmentPolicy.LEAST_LOADED
+while(not END):
+    #execute event (first the start event)
+    time.append(t)
+    packetNumber.append(np)
+    ev = q.queue.pop(0)
+    # print(f"EVENT: {ev.type}, TIME: {ev.time}, NP: {np}, SERVER: {server}, PACKETQUEUE: {packetQueue}")
+    # #se tipo arrival e server occupato salva time, al momento della prima departure calcola delta t
+    s = leastLoaded(servers)
+    if(ev.type == Type.ARRIVAL and server):
+        #wt.append(0)
+        waitingTime[s].append(-1)
+        # print("APPEND -1")
+    if(ev.type == Type.ARRIVAL and (not server)):
+        #waitingTime.insert(Event(ev.time, Type.ARRIVAL))
+        waitingTime[s].append(ev.time)
+        # print(f"APPEND {ev.time}")
+    if(ev.type == Type.DEPARTURE):
+        #rem = waitingTime.queue.pop(0)
+        if(len(waitingTime[s]) > 0):
+            rem = waitingTime[s].pop(0)
+            # print(f"POP {rem}")
+            # wt.append(rem.time - ev.time)
+            if(rem != -1):
+                wt[s].append(ev.time - rem)
+                packetServed[s] += 1
+            elif(len(waitingTime[s]) > 0):
+                wt[s].append(0)
+                r2 = waitingTime[s].pop(0)
+                wt[s].append(ev.time - r2)
+                packetServed[s] += 2
+            else:
+                wt[s].append(0)
+                packetServed[s] += 1
+
+    ev.execute(q)
+
+# print(servers)
+# #waiting time for each server
+# print(wt)
+#number of packet served from each server
+print(packetServed)
+END = False
+fig, axes = plt.subplots(figsize=(7,5), dpi=100)
+plt.bar(range(1, e2c+1), height=packetServed)
+title = 'Packet served by each server using Least Loaded, c:' + str(e2c) + ', k: ' + str(e2k)
+plt.title(title)
+plt.show()
+
+ywt = []
+for elem in wt:
+    ywt.append(mean(elem))
+fig, axes = plt.subplots(figsize=(7,5), dpi=100)
+plt.bar(range(1, e2c+1), height=ywt)
+title = 'Queuing delay using Least Loaded, c:' + str(e2c) + ', k: ' + str(e2k)
+plt.title(title)
+plt.show()
+
+
+
+
+
+servers = []
+for i in range(0,e2c):
+    servers.append([True, []])
+q = EventQueue()
+#insert start and end event
+start = Event2(0, Type.START)
+end = Event2(maxTime, Type.END)
+q.queue.append(start)
+q.queue.append(end)
+# print(q.toString())
+
+packetServed = []
+waitingTime = []
+wt = []
+for i in range(0, e2c):
+    waitingTime.append([])
+    wt.append([])
+    packetServed.append(0)
+
+qOcc = 30
+#avoid sending packets to a queue that is more than 80% full
+assignmentPolicy = AssignmentPolicy.QUEUE_OCCUPANCY
+print("\n\nQueue occupancy")
+while(not END):
+    #execute event (first the start event)
+    time.append(t)
+    packetNumber.append(np)
+    ev = q.queue.pop(0)
+    # print(f"EVENT: {ev.type}, TIME: {ev.time}, NP: {np}, SERVER: {server}, PACKETQUEUE: {packetQueue}")
+    # #se tipo arrival e server occupato salva time, al momento della prima departure calcola delta t
+    s = queueOccupancy(qOcc, servers)
+    if(ev.type == Type.ARRIVAL and server):
+        #wt.append(0)
+        waitingTime[s].append(-1)
+        # print("APPEND -1")
+    if(ev.type == Type.ARRIVAL and (not server)):
+        #waitingTime.insert(Event(ev.time, Type.ARRIVAL))
+        waitingTime[s].append(ev.time)
+        # print(f"APPEND {ev.time}")
+    if(ev.type == Type.DEPARTURE):
+        #rem = waitingTime.queue.pop(0)
+        if(len(waitingTime[s]) > 0):
+            rem = waitingTime[s].pop(0)
+            # print(f"POP {rem}")
+            # wt.append(rem.time - ev.time)
+            if(rem != -1):
+                wt[s].append(ev.time - rem)
+                packetServed[s] += 1
+            elif(len(waitingTime[s]) > 0):
+                wt[s].append(0)
+                r2 = waitingTime[s].pop(0)
+                wt[s].append(ev.time - r2)
+                packetServed[s] += 2
+            else:
+                wt[s].append(0)
+                packetServed[s] += 1
+
+    ev.execute(q)
+
+# print(servers)
+# #waiting time for each server
+# print(wt)
+#number of packet served from each server
+print(packetServed)
+END = False
+fig, axes = plt.subplots(figsize=(7,5), dpi=100)
+plt.bar(range(1, e2c+1), height=packetServed)
+title = 'Packet served by each server with control for ' + str(qOcc) +'% of the queue, c:' + str(e2c) + ', k: ' + str(e2k)
+plt.title(title)
+plt.show()
+
+ywt = []
+for elem in wt:
+    ywt.append(mean(elem))
+fig, axes = plt.subplots(figsize=(7,5), dpi=100)
+plt.bar(range(1, e2c+1), height=ywt)
+title = 'Queuing delay with control for ' + str(qOcc) +'% of the queue, c:' + str(e2c) + ', k: ' + str(e2k)
+plt.title(title)
+plt.show()
