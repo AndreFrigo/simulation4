@@ -44,15 +44,15 @@ class EventQueue:
 #lambda
 lam = 1
 #mu
-u = 2
+u = 500000
 #condition to stop the simulation
 END = False
 #event queue
 q = EventQueue()
 #time
 t = 0
-#maximum simulation time (s)
-maxTime = 100000
+#maximum simulation time (s)  ##500000
+maxTime = 5
 #seed of the RNG
 numpy.random.seed(232)
 #server status: true if it is free, false if it is working
@@ -122,6 +122,60 @@ class Event:
             print(f"      PacketQueue: {packetQueue}, server: {server}")
 
 
+#for es2
+class Event2:
+    def __init__(self, time, t):
+        self.time = time
+        self.type = t
+        self.next = None
+    def toString(self):
+        return(str(self.time)+"-"+str(self.type.name))
+    def execute(self, queue):
+        typ = self.type.value
+        global packetQueue
+        if typ == 1:
+            print("START")
+            at = numpy.random.exponential(1/lam)
+            q.insert(Event(at, Type.ARRIVAL))
+        elif typ == 2:
+            print("END")
+            global END
+            END = True
+        elif typ == 3:
+            at = self.time+numpy.random.exponential(1/lam)
+            q.insert(Event(at, Type.ARRIVAL))
+            #if server is free, seize it and schedule the departure of the packet
+            global server
+            if server == True:
+                server = False
+                at = self.time+numpy.random.exponential(1/u)
+                q.insert(Event(at, Type.DEPARTURE))
+            #if the server is busy increase the number of packet in the queue
+            else:
+                packetQueue += 1
+        elif typ == 4:
+            if(packetQueue == 0):
+                server = True 
+            else:
+                server = False
+                at = self.time+numpy.random.exponential(1/u)
+                q.insert(Event(at, Type.DEPARTURE))
+                packetQueue -= 1
+        elif typ == 5:
+            print(f"   DEBUG TIME: {self.time}")
+            # print(queue.toString())
+            print(f"      PacketQueue: {packetQueue}, server: {server}")
+
+
+
+#mean given dataset data
+def mean(data):
+    m = 0
+    n = len(data)
+    for elem in data:
+        m+=float(elem)
+    return m/n
+
 #insert start and end event
 start = Event(0, Type.START)
 end = Event(maxTime, Type.END)
@@ -143,19 +197,51 @@ q.queue.append(end)
 
 time = []
 packetNumber = []
+queueBusy = []
 t = 0
 np = 0
+
 #event manager loop
+# waitingTime = EventQueue()
+waitingTime = []
+wt = []
 while(not END):
     #execute event (first the start event)
     time.append(t)
     packetNumber.append(np)
     ev = q.queue.pop(0)
+    # print(f"EVENT: {ev.type}, TIME: {ev.time}, NP: {np}, SERVER: {server}, PACKETQUEUE: {packetQueue}")
+    # #se tipo arrival e server occupato salva time, al momento della prima departure calcola delta t
+    if(ev.type == Type.ARRIVAL and server):
+        #wt.append(0)
+        waitingTime.append(-1)
+        # print("APPEND -1")
+    if(ev.type == Type.ARRIVAL and (not server)):
+        #waitingTime.insert(Event(ev.time, Type.ARRIVAL))
+        waitingTime.append(ev.time)
+        # print(f"APPEND {ev.time}")
+    if(ev.type == Type.DEPARTURE):
+        #rem = waitingTime.queue.pop(0)
+        if(len(waitingTime) > 0):
+            rem = waitingTime.pop(0)
+            # print(f"POP {rem}")
+            # wt.append(rem.time - ev.time)
+            if(rem != -1):
+                wt.append(ev.time - rem)
+            elif(len(waitingTime) > 0):
+                wt.append(0)
+                r2 = waitingTime.pop(0)
+                wt.append(ev.time - r2)
+            else:
+                wt.append(0)
+
+    # print(waitingTime)
+    # print(wt)
     ev.execute(q)
-    # print(f"EVENT: {ev.type}, TIME: {t}, NP: {np}")
     
     # if(ev.type != Type.DEBUG):
     #     q.insert(Event(ev.time + 0.01, Type.DEBUG))
+
     t = ev.time
     if (server):
         np = packetQueue
@@ -171,34 +257,66 @@ j = 0
 packetNumberInt = []
 timeInt = []
 interval = 10000
-print(f"Len packetNumber: {len(packetNumber)}, len time: {len(time)}")
+print(f"Len packetNumber: {len(packetNumber)}, len time: {len(time)}, len wt: {len(wt)}")
 
     
 y = (lam/u)/(1-(lam/u))
 # print(y)
 
 
+# # # i = 1
+# # # mean = 0
+# # # while i<len(time):
+# # #     mean += (time[i]-time[i-1])*packetNumber[i-1]
+# # #     i += 1
+# # # print(mean/maxTime)
+
+# interval = 500
+# intervals = list(range(interval, len(time), interval))
+# intervals.append(len(time))
+# means = []
+# for elem in intervals:
+#     i = 1
+#     mean = 0
+#     while i<elem:
+#         mean += (time[i]-time[i-1])*packetNumber[i-1]
+#         i += 1
+#     means.append(mean/time[elem-1])
+
+# times = []
+# for elem in intervals:
+#     times.append(time[elem -1])
+# plt.plot(times, means)
+# plt.show()
+
+
+
+
+
+
 # i = 1
 # mean = 0
-# while i<len(time):
-#     mean += (time[i]-time[i-1])*packetNumber[i-1]
+# while i<len(queueBusy):
+#     print(i)
+#     mean += (time[i]-time[i-1])*queueBusy[i-1]
 #     i += 1
-# print(mean/maxTime)
+# print(f"11 --- average time: {mean/maxTime}")
 
-interval = 500
-intervals = list(range(interval, len(time), interval))
-intervals.append(len(time))
-means = []
-for elem in intervals:
-    i = 1
-    mean = 0
-    while i<elem:
-        mean += (time[i]-time[i-1])*packetNumber[i-1]
-        i += 1
-    means.append(mean/time[elem-1])
 
-times = []
-for elem in intervals:
-    times.append(time[elem -1])
-plt.plot(times, means)
-plt.show()
+#print(mean(wt))
+y = ((lam/u)**2) / (lam*(1-(lam/u)))
+#print(y)
+print(f"Average time that a packet has to wait in the queue: {mean(wt)}, expected: {y}")
+
+
+
+
+
+#part2
+c = 2
+k = 10
+servers = []
+for i in range(0,c):
+    servers.append([[], []])
+    for j in range(0, k):
+        servers[i][1].append([])
